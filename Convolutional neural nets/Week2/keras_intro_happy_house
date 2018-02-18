@@ -1,0 +1,641 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Keras tutorial - the Happy House\n",
+    "\n",
+    "Welcome to the first assignment of week 2. In this assignment, you will:\n",
+    "1. Learn to use Keras, a high-level neural networks API (programming framework), written in Python and capable of running on top of several lower-level frameworks including TensorFlow and CNTK. \n",
+    "2. See how you can in a couple of hours build a deep learning algorithm.\n",
+    "\n",
+    "Why are we using Keras? Keras was developed to enable deep learning engineers to build and experiment with different models very quickly. Just as TensorFlow is a higher-level framework than Python, Keras is an even higher-level framework and provides additional abstractions. Being able to go from idea to result with the least possible delay is key to finding good models. However, Keras is more restrictive than the lower-level frameworks, so there are some very complex models that you can implement in TensorFlow but not (without more difficulty) in Keras. That being said, Keras will work fine for many common models. \n",
+    "\n",
+    "In this exercise, you'll work on the \"Happy House\" problem, which we'll explain below. Let's load the required packages and solve the problem of the Happy House!"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "Using TensorFlow backend.\n"
+     ]
+    }
+   ],
+   "source": [
+    "import numpy as np\n",
+    "from keras import layers\n",
+    "from keras.layers import Input, Dense, Activation, ZeroPadding2D, BatchNormalization, Flatten, Conv2D\n",
+    "from keras.layers import AveragePooling2D, MaxPooling2D, Dropout, GlobalMaxPooling2D, GlobalAveragePooling2D\n",
+    "from keras.models import Model\n",
+    "from keras.preprocessing import image\n",
+    "from keras.utils import layer_utils\n",
+    "from keras.utils.data_utils import get_file\n",
+    "from keras.applications.imagenet_utils import preprocess_input\n",
+    "import pydot\n",
+    "from IPython.display import SVG\n",
+    "from keras.utils.vis_utils import model_to_dot\n",
+    "from keras.utils import plot_model\n",
+    "from kt_utils import *\n",
+    "\n",
+    "import keras.backend as K\n",
+    "K.set_image_data_format('channels_last')\n",
+    "import matplotlib.pyplot as plt\n",
+    "from matplotlib.pyplot import imshow\n",
+    "\n",
+    "%matplotlib inline"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Note**: As you can see, we've imported a lot of functions from Keras. You can use them easily just by calling them directly in the notebook. Ex: `X = Input(...)` or `X = ZeroPadding2D(...)`."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 1 - The Happy House \n",
+    "\n",
+    "For your next vacation, you decided to spend a week with five of your friends from school. It is a very convenient house with many things to do nearby. But the most important benefit is that everybody has commited to be happy when they are in the house. So anyone wanting to enter the house must prove their current state of happiness.\n",
+    "\n",
+    "<img src=\"images/happy-house.jpg\" style=\"width:350px;height:270px;\">\n",
+    "<caption><center> <u> <font color='purple'> **Figure 1** </u><font color='purple'>  : **the Happy House**</center></caption>\n",
+    "\n",
+    "\n",
+    "As a deep learning expert, to make sure the \"Happy\" rule is strictly applied, you are going to build an algorithm which that uses pictures from the front door camera to check if the person is happy or not. The door should open only if the person is happy. \n",
+    "\n",
+    "You have gathered pictures of your friends and yourself, taken by the front-door camera. The dataset is labbeled. \n",
+    "\n",
+    "<img src=\"images/house-members.png\" style=\"width:550px;height:250px;\">\n",
+    "\n",
+    "Run the following code to normalize the dataset and learn about its shapes."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "number of training examples = 600\n",
+      "number of test examples = 150\n",
+      "X_train shape: (600, 64, 64, 3)\n",
+      "Y_train shape: (600, 1)\n",
+      "X_test shape: (150, 64, 64, 3)\n",
+      "Y_test shape: (150, 1)\n"
+     ]
+    }
+   ],
+   "source": [
+    "X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset()\n",
+    "\n",
+    "# Normalize image vectors\n",
+    "X_train = X_train_orig/255.\n",
+    "X_test = X_test_orig/255.\n",
+    "\n",
+    "# Reshape\n",
+    "Y_train = Y_train_orig.T\n",
+    "Y_test = Y_test_orig.T\n",
+    "\n",
+    "print (\"number of training examples = \" + str(X_train.shape[0]))\n",
+    "print (\"number of test examples = \" + str(X_test.shape[0]))\n",
+    "print (\"X_train shape: \" + str(X_train.shape))\n",
+    "print (\"Y_train shape: \" + str(Y_train.shape))\n",
+    "print (\"X_test shape: \" + str(X_test.shape))\n",
+    "print (\"Y_test shape: \" + str(Y_test.shape))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Details of the \"Happy\" dataset**:\n",
+    "- Images are of shape (64,64,3)\n",
+    "- Training: 600 pictures\n",
+    "- Test: 150 pictures\n",
+    "\n",
+    "It is now time to solve the \"Happy\" Challenge."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 2 - Building a model in Keras\n",
+    "\n",
+    "Keras is very good for rapid prototyping. In just a short time you will be able to build a model that achieves outstanding results.\n",
+    "\n",
+    "Here is an example of a model in Keras:\n",
+    "\n",
+    "```python\n",
+    "def model(input_shape):\n",
+    "    # Define the input placeholder as a tensor with shape input_shape. Think of this as your input image!\n",
+    "    X_input = Input(input_shape)\n",
+    "\n",
+    "    # Zero-Padding: pads the border of X_input with zeroes\n",
+    "    X = ZeroPadding2D((3, 3))(X_input)\n",
+    "\n",
+    "    # CONV -> BN -> RELU Block applied to X\n",
+    "    X = Conv2D(32, (7, 7), strides = (1, 1), name = 'conv0')(X)\n",
+    "    X = BatchNormalization(axis = 3, name = 'bn0')(X)\n",
+    "    X = Activation('relu')(X)\n",
+    "\n",
+    "    # MAXPOOL\n",
+    "    X = MaxPooling2D((2, 2), name='max_pool')(X)\n",
+    "\n",
+    "    # FLATTEN X (means convert it to a vector) + FULLYCONNECTED\n",
+    "    X = Flatten()(X)\n",
+    "    X = Dense(1, activation='sigmoid', name='fc')(X)\n",
+    "\n",
+    "    # Create model. This creates your Keras model instance, you'll use this instance to train/test the model.\n",
+    "    model = Model(inputs = X_input, outputs = X, name='HappyModel')\n",
+    "    \n",
+    "    return model\n",
+    "```\n",
+    "\n",
+    "Note that Keras uses a different convention with variable names than we've previously used with numpy and TensorFlow. In particular, rather than creating and assigning a new variable on each step of forward propagation such as `X`, `Z1`, `A1`, `Z2`, `A2`, etc. for the computations for the different layers, in Keras code each line above just reassigns `X` to a new value using `X = ...`. In other words, during each step of forward propagation, we are just writing the latest value in the commputation into the same variable `X`. The only exception was `X_input`, which we kept separate and did not overwrite, since we needed it at the end to create the Keras model instance (`model = Model(inputs = X_input, ...)` above). \n",
+    "\n",
+    "**Exercise**: Implement a `HappyModel()`. This assignment is more open-ended than most. We suggest that you start by implementing a model using the architecture we suggest, and run through the rest of this assignment using that as your initial model. But after that, come back and take initiative to try out other model architectures. For example, you might take inspiration from the model above, but then vary the network architecture and hyperparameters however you wish. You can also use other functions such as `AveragePooling2D()`, `GlobalMaxPooling2D()`, `Dropout()`. \n",
+    "\n",
+    "**Note**: You have to be careful with your data's shapes. Use what you've learned in the videos to make sure your convolutional, pooling and fully-connected layers are adapted to the volumes you're applying it to."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": [
+    "# GRADED FUNCTION: HappyModel\n",
+    "\n",
+    "def HappyModel(input_shape):\n",
+    "    \"\"\"\n",
+    "    Implementation of the HappyModel.\n",
+    "    \n",
+    "    Arguments:\n",
+    "    input_shape -- shape of the images of the dataset\n",
+    "\n",
+    "    Returns:\n",
+    "    model -- a Model() instance in Keras\n",
+    "    \"\"\"\n",
+    "    \n",
+    "    ### START CODE HERE ###\n",
+    "    # Feel free to use the suggested outline in the text above to get started, and run through the whole\n",
+    "    # exercise (including the later portions of this notebook) once. The come back also try out other\n",
+    "    # network architectures as well. \n",
+    "    \n",
+    "    # Define the input placeholder as a tensor with shape input_shape. Think of this as your input image!\n",
+    "    X_input = Input(input_shape)\n",
+    "\n",
+    "    # Zero-Padding: pads the border of X_input with zeroes\n",
+    "    X = ZeroPadding2D((3, 3))(X_input)\n",
+    "\n",
+    "    # CONV -> BN -> RELU Block applied to X\n",
+    "    X = Conv2D(32, (7, 7), strides = (1, 1), name = 'conv0')(X)\n",
+    "    X = BatchNormalization(axis = 3, name = 'bn0')(X)\n",
+    "    X = Activation('relu')(X)\n",
+    "\n",
+    "    # MAXPOOL\n",
+    "    X = MaxPooling2D((2, 2), name='max_pool')(X)\n",
+    "\n",
+    "    # FLATTEN X (means convert it to a vector) + FULLYCONNECTED\n",
+    "    X = Flatten()(X)\n",
+    "    X = Dense(1, activation='sigmoid', name='fc')(X)\n",
+    "\n",
+    "    # Create model. This creates your Keras model instance, you'll use this instance to train/test the model.\n",
+    "    model = Model(inputs = X_input, outputs = X, name='HappyModel')\n",
+    "    \n",
+    "    ### END CODE HERE ###\n",
+    "    \n",
+    "    return model"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "You have now built a function to describe your model. To train and test this model, there are four steps in Keras:\n",
+    "1. Create the model by calling the function above\n",
+    "2. Compile the model by calling `model.compile(optimizer = \"...\", loss = \"...\", metrics = [\"accuracy\"])`\n",
+    "3. Train the model on train data by calling `model.fit(x = ..., y = ..., epochs = ..., batch_size = ...)`\n",
+    "4. Test the model on test data by calling `model.evaluate(x = ..., y = ...)`\n",
+    "\n",
+    "If you want to know more about `model.compile()`, `model.fit()`, `model.evaluate()` and their arguments, refer to the official [Keras documentation](https://keras.io/models/model/).\n",
+    "\n",
+    "**Exercise**: Implement step 1, i.e. create the model."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 16,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "### START CODE HERE ### (1 line)\n",
+    "happyModel = HappyModel(X_train.shape[1:])\n",
+    "### END CODE HERE ###"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Exercise**: Implement step 2, i.e. compile the model to configure the learning process. Choose the 3 arguments of `compile()` wisely. Hint: the Happy Challenge is a binary classification problem."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 31,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "### START CODE HERE ### (1 line)\n",
+    "happyModel.compile(optimizer = 'adam', loss = 'binary_crossentropy', metrics = [\"accuracy\"])\n",
+    "### END CODE HERE ###"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "**Exercise**: Implement step 3, i.e. train the model. Choose the number of epochs and the batch size."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 32,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Epoch 1/5\n",
+      "600/600 [==============================] - 17s - loss: 8.0590 - acc: 0.5000    \n",
+      "Epoch 2/5\n",
+      "600/600 [==============================] - 20s - loss: 8.0590 - acc: 0.5000    \n",
+      "Epoch 3/5\n",
+      "600/600 [==============================] - 21s - loss: 8.0590 - acc: 0.5000    \n",
+      "Epoch 4/5\n",
+      "600/600 [==============================] - 23s - loss: 8.0590 - acc: 0.5000    \n",
+      "Epoch 5/5\n",
+      "600/600 [==============================] - 22s - loss: 8.0590 - acc: 0.5000    \n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "<keras.callbacks.History at 0x7ff7987eb898>"
+      ]
+     },
+     "execution_count": 32,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "### START CODE HERE ### (1 line)\n",
+    "happyModel.fit(x = X_train, y = Y_train, epochs = 5, batch_size = 16)\n",
+    "### END CODE HERE ###"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "Note that if you run `fit()` again, the `model` will continue to train with the parameters it has already learnt instead of reinitializing them.\n",
+    "\n",
+    "**Exercise**: Implement step 4, i.e. test/evaluate the model."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 33,
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "150/150 [==============================] - 2s     \n",
+      "\n",
+      "Loss = 9.02613381704\n",
+      "Test Accuracy = 0.440000001589\n"
+     ]
+    }
+   ],
+   "source": [
+    "### START CODE HERE ### (1 line)\n",
+    "preds = happyModel.evaluate(x = X_test, y = Y_test)\n",
+    "### END CODE HERE ###\n",
+    "print()\n",
+    "print (\"Loss = \" + str(preds[0]))\n",
+    "print (\"Test Accuracy = \" + str(preds[1]))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "If your `happyModel()` function worked, you should have observed much better than random-guessing (50%) accuracy on the train and test sets.\n",
+    "\n",
+    "To give you a point of comparison, our model gets around **95% test accuracy in 40 epochs** (and 99% train accuracy) with a mini batch size of 16 and \"adam\" optimizer. But our model gets decent accuracy after just 2-5 epochs, so if you're comparing different models you can also train a variety of models on just a few epochs and see how they compare. \n",
+    "\n",
+    "If you have not yet achieved a very good accuracy (let's say more than 80%), here're some things you can play around with to try to achieve it:\n",
+    "\n",
+    "- Try using blocks of CONV->BATCHNORM->RELU such as:\n",
+    "```python\n",
+    "X = Conv2D(32, (3, 3), strides = (1, 1), name = 'conv0')(X)\n",
+    "X = BatchNormalization(axis = 3, name = 'bn0')(X)\n",
+    "X = Activation('relu')(X)\n",
+    "```\n",
+    "until your height and width dimensions are quite low and your number of channels quite large (≈32 for example). You are encoding useful information in a volume with a lot of channels. You can then flatten the volume and use a fully-connected layer.\n",
+    "- You can use MAXPOOL after such blocks. It will help you lower the dimension in height and width.\n",
+    "- Change your optimizer. We find Adam works well. \n",
+    "- If the model is struggling to run and you get memory issues, lower your batch_size (12 is usually a good compromise)\n",
+    "- Run on more epochs, until you see the train accuracy plateauing. \n",
+    "\n",
+    "Even if you have achieved a good accuracy, please feel free to keep playing with your model to try to get even better results. \n",
+    "\n",
+    "**Note**: If you perform hyperparameter tuning on your model, the test set actually becomes a dev set, and your model might end up overfitting to the test (dev) set. But just for the purpose of this assignment, we won't worry about that here.\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 3 - Conclusion\n",
+    "\n",
+    "Congratulations, you have solved the Happy House challenge! \n",
+    "\n",
+    "Now, you just need to link this model to the front-door camera of your house. We unfortunately won't go into the details of how to do that here. "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "<font color='blue'>\n",
+    "**What we would like you to remember from this assignment:**\n",
+    "- Keras is a tool we recommend for rapid prototyping. It allows you to quickly try out different model architectures. Are there any applications of deep learning to your daily life that you'd like to implement using Keras? \n",
+    "- Remember how to code a model in Keras and the four steps leading to the evaluation of your model on the test set. Create->Compile->Fit/Train->Evaluate/Test."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 4 - Test with your own image (Optional)\n",
+    "\n",
+    "Congratulations on finishing this assignment. You can now take a picture of your face and see if you could enter the Happy House. To do that:\n",
+    "    1. Click on \"File\" in the upper bar of this notebook, then click \"Open\" to go on your Coursera Hub.\n",
+    "    2. Add your image to this Jupyter Notebook's directory, in the \"images\" folder\n",
+    "    3. Write your image's name in the following code\n",
+    "    4. Run the code and check if the algorithm is right (0 is unhappy, 1 is happy)!\n",
+    "    \n",
+    "The training/test sets were quite similar; for example, all the pictures were taken against the same background (since a front door camera is always mounted in the same position). This makes the problem easier, but a model trained on this data may or may not work on your own data. But feel free to give it a try! "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 35,
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "[[ 0.]]\n"
+     ]
+    },
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<matplotlib.figure.Figure at 0x7ff6dca29128>"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "### START CODE HERE ###\n",
+    "img_path = 'images/ayushman.JPG'\n",
+    "### END CODE HERE ###\n",
+    "img = image.load_img(img_path, target_size=(64, 64))\n",
+    "imshow(img)\n",
+    "\n",
+    "x = image.img_to_array(img)\n",
+    "x = np.expand_dims(x, axis=0)\n",
+    "x = preprocess_input(x)\n",
+    "\n",
+    "print(happyModel.predict(x))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## 5 - Other useful functions in Keras (Optional)\n",
+    "\n",
+    "Two other basic features of Keras that you'll find useful are:\n",
+    "- `model.summary()`: prints the details of your layers in a table with the sizes of its inputs/outputs\n",
+    "- `plot_model()`: plots your graph in a nice layout. You can even save it as \".png\" using SVG() if you'd like to share it on social media ;). It is saved in \"File\" then \"Open...\" in the upper bar of the notebook.\n",
+    "\n",
+    "Run the following code."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 36,
+   "metadata": {
+    "scrolled": false
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "_________________________________________________________________\n",
+      "Layer (type)                 Output Shape              Param #   \n",
+      "=================================================================\n",
+      "input_6 (InputLayer)         (None, 64, 64, 3)         0         \n",
+      "_________________________________________________________________\n",
+      "zero_padding2d_6 (ZeroPaddin (None, 70, 70, 3)         0         \n",
+      "_________________________________________________________________\n",
+      "conv0 (Conv2D)               (None, 64, 64, 32)        4736      \n",
+      "_________________________________________________________________\n",
+      "bn0 (BatchNormalization)     (None, 64, 64, 32)        128       \n",
+      "_________________________________________________________________\n",
+      "activation_2 (Activation)    (None, 64, 64, 32)        0         \n",
+      "_________________________________________________________________\n",
+      "max_pool (MaxPooling2D)      (None, 32, 32, 32)        0         \n",
+      "_________________________________________________________________\n",
+      "flatten_2 (Flatten)          (None, 32768)             0         \n",
+      "_________________________________________________________________\n",
+      "fc (Dense)                   (None, 1)                 32769     \n",
+      "=================================================================\n",
+      "Total params: 37,633\n",
+      "Trainable params: 37,569\n",
+      "Non-trainable params: 64\n",
+      "_________________________________________________________________\n"
+     ]
+    }
+   ],
+   "source": [
+    "happyModel.summary()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 37,
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "image/svg+xml": [
+       "<svg height=\"556pt\" viewBox=\"0.00 0.00 225.00 556.00\" width=\"225pt\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n",
+       "<g class=\"graph\" id=\"graph0\" transform=\"scale(1 1) rotate(0) translate(4 552)\">\n",
+       "<title>G</title>\n",
+       "<polygon fill=\"white\" points=\"-4,4 -4,-552 221,-552 221,4 -4,4\" stroke=\"none\"/>\n",
+       "<!-- 140701513174712 -->\n",
+       "<g class=\"node\" id=\"node1\"><title>140701513174712</title>\n",
+       "<polygon fill=\"none\" points=\"45.5,-511.5 45.5,-547.5 171.5,-547.5 171.5,-511.5 45.5,-511.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-525.8\">input_6: InputLayer</text>\n",
+       "</g>\n",
+       "<!-- 140701513174880 -->\n",
+       "<g class=\"node\" id=\"node2\"><title>140701513174880</title>\n",
+       "<polygon fill=\"none\" points=\"0,-438.5 0,-474.5 217,-474.5 217,-438.5 0,-438.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-452.8\">zero_padding2d_6: ZeroPadding2D</text>\n",
+       "</g>\n",
+       "<!-- 140701513174712&#45;&gt;140701513174880 -->\n",
+       "<g class=\"edge\" id=\"edge1\"><title>140701513174712-&gt;140701513174880</title>\n",
+       "<path d=\"M108.5,-511.313C108.5,-503.289 108.5,-493.547 108.5,-484.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-484.529 108.5,-474.529 105,-484.529 112,-484.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701513173144 -->\n",
+       "<g class=\"node\" id=\"node3\"><title>140701513173144</title>\n",
+       "<polygon fill=\"none\" points=\"56,-365.5 56,-401.5 161,-401.5 161,-365.5 56,-365.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-379.8\">conv0: Conv2D</text>\n",
+       "</g>\n",
+       "<!-- 140701513174880&#45;&gt;140701513173144 -->\n",
+       "<g class=\"edge\" id=\"edge2\"><title>140701513174880-&gt;140701513173144</title>\n",
+       "<path d=\"M108.5,-438.313C108.5,-430.289 108.5,-420.547 108.5,-411.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-411.529 108.5,-401.529 105,-411.529 112,-411.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701512749296 -->\n",
+       "<g class=\"node\" id=\"node4\"><title>140701512749296</title>\n",
+       "<polygon fill=\"none\" points=\"31.5,-292.5 31.5,-328.5 185.5,-328.5 185.5,-292.5 31.5,-292.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-306.8\">bn0: BatchNormalization</text>\n",
+       "</g>\n",
+       "<!-- 140701513173144&#45;&gt;140701512749296 -->\n",
+       "<g class=\"edge\" id=\"edge3\"><title>140701513173144-&gt;140701512749296</title>\n",
+       "<path d=\"M108.5,-365.313C108.5,-357.289 108.5,-347.547 108.5,-338.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-338.529 108.5,-328.529 105,-338.529 112,-338.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701512750024 -->\n",
+       "<g class=\"node\" id=\"node5\"><title>140701512750024</title>\n",
+       "<polygon fill=\"none\" points=\"35,-219.5 35,-255.5 182,-255.5 182,-219.5 35,-219.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-233.8\">activation_2: Activation</text>\n",
+       "</g>\n",
+       "<!-- 140701512749296&#45;&gt;140701512750024 -->\n",
+       "<g class=\"edge\" id=\"edge4\"><title>140701512749296-&gt;140701512750024</title>\n",
+       "<path d=\"M108.5,-292.313C108.5,-284.289 108.5,-274.547 108.5,-265.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-265.529 108.5,-255.529 105,-265.529 112,-265.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701512814320 -->\n",
+       "<g class=\"node\" id=\"node6\"><title>140701512814320</title>\n",
+       "<polygon fill=\"none\" points=\"26.5,-146.5 26.5,-182.5 190.5,-182.5 190.5,-146.5 26.5,-146.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-160.8\">max_pool: MaxPooling2D</text>\n",
+       "</g>\n",
+       "<!-- 140701512750024&#45;&gt;140701512814320 -->\n",
+       "<g class=\"edge\" id=\"edge5\"><title>140701512750024-&gt;140701512814320</title>\n",
+       "<path d=\"M108.5,-219.313C108.5,-211.289 108.5,-201.547 108.5,-192.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-192.529 108.5,-182.529 105,-192.529 112,-192.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701512890576 -->\n",
+       "<g class=\"node\" id=\"node7\"><title>140701512890576</title>\n",
+       "<polygon fill=\"none\" points=\"54,-73.5 54,-109.5 163,-109.5 163,-73.5 54,-73.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-87.8\">flatten_2: Flatten</text>\n",
+       "</g>\n",
+       "<!-- 140701512814320&#45;&gt;140701512890576 -->\n",
+       "<g class=\"edge\" id=\"edge6\"><title>140701512814320-&gt;140701512890576</title>\n",
+       "<path d=\"M108.5,-146.313C108.5,-138.289 108.5,-128.547 108.5,-119.569\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-119.529 108.5,-109.529 105,-119.529 112,-119.529\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "<!-- 140701512891808 -->\n",
+       "<g class=\"node\" id=\"node8\"><title>140701512891808</title>\n",
+       "<polygon fill=\"none\" points=\"74,-0.5 74,-36.5 143,-36.5 143,-0.5 74,-0.5\" stroke=\"black\"/>\n",
+       "<text font-family=\"Times,serif\" font-size=\"14.00\" text-anchor=\"middle\" x=\"108.5\" y=\"-14.8\">fc: Dense</text>\n",
+       "</g>\n",
+       "<!-- 140701512890576&#45;&gt;140701512891808 -->\n",
+       "<g class=\"edge\" id=\"edge7\"><title>140701512890576-&gt;140701512891808</title>\n",
+       "<path d=\"M108.5,-73.3129C108.5,-65.2895 108.5,-55.5475 108.5,-46.5691\" fill=\"none\" stroke=\"black\"/>\n",
+       "<polygon fill=\"black\" points=\"112,-46.5288 108.5,-36.5288 105,-46.5289 112,-46.5288\" stroke=\"black\"/>\n",
+       "</g>\n",
+       "</g>\n",
+       "</svg>"
+      ],
+      "text/plain": [
+       "<IPython.core.display.SVG object>"
+      ]
+     },
+     "execution_count": 37,
+     "metadata": {},
+     "output_type": "execute_result"
+    }
+   ],
+   "source": [
+    "plot_model(happyModel, to_file='HappyModel.png')\n",
+    "SVG(model_to_dot(happyModel).create(prog='dot', format='svg'))"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
